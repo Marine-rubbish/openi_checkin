@@ -22,8 +22,8 @@ action() {
     fi
 
     # 捕获 body + http_code（最后一行）
-    local resp_and_code
-    resp_and_code=$(curl --fail -sS "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/${ACTION}?id=${JOB_ID}&_csrf=${CSRF}" \
+    local resp
+    resp=$(curl --fail -sS "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/${ACTION}?id=${JOB_ID}&_csrf=${CSRF}" \
         -H 'accept: application/json, text/plain, */*' \
         -H 'accept-language: en,en-GB;q=0.9,en-US;q=0.8,zh-CN;q=0.7,zh;q=0.6' \
         -H 'content-type: application/json;charset=UTF-8' \
@@ -40,17 +40,9 @@ action() {
         -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0' \
         "${DATA_ARGS[@]}")
     
-    local body
-    body=$(echo "$resp_and_code" | sed '$d')
-
-    # 输出 body 供调用方解析
-    printf '%s\n' "$body"
-
-    # 在 HTTP 错误时返回非 0
-    if [ "${http_code:-0}" -ge 400 ]; then
-        return 22
-    fi
-    
+    echo "Action: $ACTION, raw response: $resp"
+    status=$(echo "${resp}" | jq -r '.data.status')
+    echo "Status: $status"
     return 0
 }
 

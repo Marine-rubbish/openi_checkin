@@ -13,7 +13,7 @@ jobs:
         USER_NAME: ${{ vars.USER_NAME }}        # 你的账户名称
         REPO_NAME: ${{ vars.REPO_NAME }}        # 云脑环境对应的项目名称
         COOKIE: ${{ secrets.OPENI_COOKIE }}     # 你的cookie
-        BRIEF_COUNT: 20                         # 发送 brief 的次数，按需修改
+        BRIEF_COUNT: 50                         # 发送 brief 的次数，按需修改
         BRIEF_INTERVAL: 10                      # 间隔秒数
     steps:
       # 检出仓库内文件
@@ -37,9 +37,7 @@ jobs:
             # 确保一定是在RUNNING状态
             for i in $(seq 1 "${BRIEF_COUNT}"); do
                 echo "第 ${i} 次发送 brief"
-                resp=$(./scripts/action.sh brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE" || true)
-                echo "raw response: $resp"
-                status=$(echo "$resp" | jq -r '.data.status // empty')
+                action brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
                 echo "task status: $status"
                 if [ "$status" = "RUNNING" ]; then
                     echo "任务已启动，状态为 RUNNING"
