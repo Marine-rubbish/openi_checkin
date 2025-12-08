@@ -1,0 +1,50 @@
+name: Daily Debug
+
+on:
+  schedule:
+    # 每天 12:00 UTC 触发（请根据你需要的本地时间换算）
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-debug:
+    runs-on: ubuntu-latest
+    env:
+        USER_NAME: ${{ vars.USER_NAME }}        # 你的账户名称
+        REPO_NAME: ${{ vars.REPO_NAME }}        # 云脑环境对应的项目名称
+        COOKIE: ${{ secrets.OPENI_COOKIE }}     # 你的cookie
+        BRIEF_COUNT: 20                         # 发送 brief 的次数，按需修改
+        BRIEF_INTERVAL: 10                      # 间隔秒数
+    steps:
+      - name: Get JOB_ID
+        # 字面块标量（保留换行）
+        run: |
+            set -euo pipefail
+            JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
+                -H "Cookie: $COOKIE" \
+            | jq '.data.tasks | map(.task.id) | max')
+            echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
+            echo "最大 task id: ${JOB_ID}"
+            chmod +x ./scripts/action.sh
+      - name: Start debug job
+        run: |
+            set -e
+            ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
+            # 确保一定是在RUNNING状态
+            for i in $(seq 1 "${BRIEF_COUNT}"); do
+                echo "第 ${i} 次发送 brief"
+                resp=$(./scripts/action.sh brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE" || true)
+                echo "raw response: $resp"
+                status=$(echo "$resp" | jq -r '.data.status // empty')
+                echo "task status: $status"
+                if [ "$status" = "RUNNING" ]; then
+                    echo "任务已启动，状态为 RUNNING"
+                    break
+                fi
+                sleep "${BRIEF_INTERVAL}"
+            done
+      - name: Stop debug job
+        run: |
+            set -e
+            # 从 COOKIE 中提取 _csrf（如果存在）
+            
