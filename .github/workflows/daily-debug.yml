@@ -18,7 +18,7 @@ jobs:
     steps:
       # 检出仓库内文件
       - name: Checkout repo
-        uses: actions/checkout@3
+        uses: actions/checkout@v6
 
       - name: Get JOB_ID
         # 字面块标量（保留换行）
