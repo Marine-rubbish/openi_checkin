@@ -16,6 +16,10 @@ jobs:
         BRIEF_COUNT: 20                         # 发送 brief 的次数，按需修改
         BRIEF_INTERVAL: 10                      # 间隔秒数
     steps:
+      # 检出仓库内文件
+      - name: Checkout repo
+        uses: actions/checkout@3
+
       - name: Get JOB_ID
         # 字面块标量（保留换行）
         run: |
