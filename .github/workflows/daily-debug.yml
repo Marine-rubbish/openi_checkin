@@ -45,7 +45,7 @@ jobs:
             #     fi
             #     sleep "${BRIEF_INTERVAL}"
             # done
-            sleep 200
+            sleep 100
             - name: Get JOB_ID
         # 字面块标量（保留换行）
       - name: Get Next JOB_ID
