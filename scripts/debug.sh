@@ -19,14 +19,13 @@ if [ -z "$OPENI_COOKIE" ] || [ -z "$OPENI_CSRF" ]; then
 fi
 
 # list
-# 列出任务（示例接口名可能不同，按 Network 捕获的实际接口替换）
-JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/marine_sci/openstl-hycom-code/ai_task/list" \
+set -euo pipefail
+JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
     -H "Cookie: $OPENI_COOKIE" \
-    | jq '.data.tasks | map(.task.id) | max')
-
-echo "最大 task id: $JOB_ID"
-
-echo '{"code":0,"msg":"ok","data":{"id":727827,"status":"WAITING"}}' | jq -r '.data.status'
+| jq '.data.tasks | map(.task.id) | max')
+echo "JOB_ID=${JOB_ID}"
+echo "最大 task id: ${JOB_ID}"
+chmod +x ./scripts/action.sh
 
 # # restart
 # 从 OPENI_COOKIE 中提取 _csrf（如果存在）
