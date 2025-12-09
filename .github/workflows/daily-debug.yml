@@ -46,8 +46,16 @@ jobs:
             #     sleep "${BRIEF_INTERVAL}"
             # done
             sleep 200
+            - name: Get JOB_ID
+        # 字面块标量（保留换行）
+      - name: Get Next JOB_ID
+        run: |
+            set -euo pipefail
+            JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
+                -H "Cookie: $COOKIE" \
+            | jq '.data.tasks | map(.task.id) | max')
+            echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
+            echo "最大 task id: ${JOB_ID}"
       - name: Stop debug job
         run: |
-            set -e
             ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
-            
