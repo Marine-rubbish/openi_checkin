@@ -59,5 +59,5 @@ echo "$OPENI_COOKIE"
 
 # 可执行入口
 if [ -n "${BASH_VERSION:-}" ] && [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    action "$@"
+    replace_csrf "$@"
 fi
