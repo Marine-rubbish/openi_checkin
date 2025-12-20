@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
         USER_NAME: ${{ vars.USER_NAME }}        # 你的账户名称
+        PASS_WORD: ${{ vars.PASS_WORD }}        # 你的账户密码
         REPO_NAME: ${{ vars.REPO_NAME }}        # 云脑环境对应的项目名称
         COOKIE: ${{ secrets.OPENI_COOKIE }}     # 你的cookie
         BRIEF_COUNT: 50                         # 发送 brief 的次数，按需修改
@@ -29,7 +30,13 @@ jobs:
             | jq '.data.tasks | map(.task.id) | max')
             echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
             echo "最大 task id: ${JOB_ID}"
-            chmod +x ./scripts/action.sh
+            chmod +x ./scripts/action.sh ./scripts/replace_csrf.sh ./scripts/login.sh
+      - name: Re Login
+        # 字面块标量（保留换行）
+        run: |
+            set -e
+            ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
+            export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
       - name: Start debug job
         run: |
             set -e
