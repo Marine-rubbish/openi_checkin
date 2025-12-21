@@ -63,16 +63,16 @@ jobs:
             # done
             sleep 100
         # 字面块标量（保留换行）
-      - name: Re Login 2
-        # 字面块标量（保留换行）
-        run: |
-            set -e
-            ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
-            # 从 secrets 初始化 OPENI_COOKIE（如果 secrets 过期，用 login.sh 更新）
-            export OPENI_COOKIE="${{ secrets.OPENI_COOKIE }}"
-            # 然后用 replace_csrf.sh 更新其中的 _csrf 和 i_like_openi
-            export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
-            echo "OPENI_COOKIE=${OPENI_COOKIE}" >> $GITHUB_ENV
+      # - name: Re Login 2
+      #   # 字面块标量（保留换行）
+      #   run: |
+      #       set -e
+      #       ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
+      #       # 从 secrets 初始化 OPENI_COOKIE（如果 secrets 过期，用 login.sh 更新）
+      #       export OPENI_COOKIE="${{ secrets.OPENI_COOKIE }}"
+      #       # 然后用 replace_csrf.sh 更新其中的 _csrf 和 i_like_openi
+      #       export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
+      #       echo "OPENI_COOKIE=${OPENI_COOKIE}" >> $GITHUB_ENV
       - name: Get Next JOB_ID
         run: |
             set -euo pipefail
