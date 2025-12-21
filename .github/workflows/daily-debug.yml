@@ -42,11 +42,11 @@ jobs:
             set -e
             ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
             export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
-            echo "OPENI_COOKIE=${OPENI_COOKIE}"
+            echo "OPENI_COOKIE=${OPENI_COOKIE}" >> $GITHUB_ENV
       - name: Start debug job
         run: |
             set -e
-            ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
+            ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
             # 确保一定是在RUNNING状态
             # for i in $(seq 1 "${BRIEF_COUNT}"); do
             #     echo "第 ${i} 次发送 brief"
@@ -64,10 +64,10 @@ jobs:
         run: |
             set -euo pipefail
             JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
-                -H "Cookie: $COOKIE" \
+                -H "Cookie: $OPENI_COOKIE" \
             | jq '.data.tasks | map(.task.id) | max')
             echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
             echo "最大 task id: ${JOB_ID}"
       - name: Stop debug job
         run: |
-            ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
+            ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
