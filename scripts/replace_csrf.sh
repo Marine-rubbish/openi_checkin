@@ -1,4 +1,5 @@
 # 从 cookies.txt 提取 _csrf 和 i_like_openi 并替换到 OPENI_COOKIE 中
+OPENI_COOKIE="${OPENI_COOKIE:-}"
 COOKIES_FILE="${COOKIES_FILE:-cookies.txt}"
 if [ ! -f "$COOKIES_FILE" ]; then
     echo "找不到 cookies 文件：$COOKIES_FILE"
@@ -57,4 +58,4 @@ else
     # echo "未在 $COOKIES_FILE 中找到 i_like_openi，保持原 OPENI_COOKIE 中的值"
 fi
 
-echo "OPENI_COOKIE=$OPENI_COOKIE"
+echo "$OPENI_COOKIE"
