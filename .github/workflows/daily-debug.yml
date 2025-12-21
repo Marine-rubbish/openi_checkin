@@ -21,6 +21,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v6
 
+      # - name: Install dependencies
+      #   run: |
+      #     # sudo apt-get update
+      #     apt-get install -y jq
+
       - name: Get JOB_ID
         # 字面块标量（保留换行）
         run: |
@@ -37,6 +42,7 @@ jobs:
             set -e
             ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
             export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
+            echo "OPENI_COOKIE=${OPENI_COOKIE}"
       - name: Start debug job
         run: |
             set -e
