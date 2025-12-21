@@ -61,7 +61,7 @@ jobs:
             #     fi
             #     sleep "${BRIEF_INTERVAL}"
             # done
-            sleep 100
+            sleep 200
         # 字面块标量（保留换行）
       # - name: Re Login 2
       #   # 字面块标量（保留换行）
