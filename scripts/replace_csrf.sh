@@ -45,6 +45,7 @@ if [ -n "$CSRF_FROM_FILE" ]; then
     update_cookie_var "_csrf" "$CSRF_FROM_FILE"
     # echo "已从 $COOKIES_FILE 提取并替换 _csrf"
 else
+    :
     # echo "未在 $COOKIES_FILE 中找到 _csrf，保持原 OPENI_COOKIE 中的值"
 fi
 
@@ -52,6 +53,7 @@ if [ -n "$ILIKE_FROM_FILE" ]; then
     update_cookie_var "i_like_openi" "$ILIKE_FROM_FILE"
     # echo "已从 $COOKIES_FILE 提取并替换 i_like_openi"
 else
+    :
     # echo "未在 $COOKIES_FILE 中找到 i_like_openi，保持原 OPENI_COOKIE 中的值"
 fi
 
