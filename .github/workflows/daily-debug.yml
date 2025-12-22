@@ -52,11 +52,11 @@ jobs:
       - name: Start debug job
         run: |
             set -e
-            ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
+            ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
             # 确保一定是在RUNNING状态
             # for i in $(seq 1 "${BRIEF_COUNT}"); do
             #     echo "第 ${i} 次发送 brief"
-            #     action brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
+            #     action brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
             #     echo "task status: $status"
             #     if [ "$status" = "RUNNING" ]; then
             #         echo "任务已启动，状态为 RUNNING"
@@ -93,4 +93,4 @@ jobs:
               echo "Error: Task not RUNNING, cannot stop."
               exit 1
             fi
-            ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
+            ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
