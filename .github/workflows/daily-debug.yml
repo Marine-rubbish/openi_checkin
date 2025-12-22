@@ -36,16 +36,19 @@ jobs:
             echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
             echo "最大 task id: ${JOB_ID}"
             chmod +x ./scripts/action.sh ./scripts/replace_csrf.sh ./scripts/login.sh
-      - name: Re Login
-        # 字面块标量（保留换行）
+      - name: Check Cookie Validity
         run: |
-            set -e
-            ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
-            # 从 secrets 初始化 OPENI_COOKIE（如果 secrets 过期，用 login.sh 更新）
-            export OPENI_COOKIE="${{ secrets.OPENI_COOKIE }}"
-            # 然后用 replace_csrf.sh 更新其中的 _csrf 和 i_like_openi
-            export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
-            echo "OPENI_COOKIE=${OPENI_COOKIE}" >> $GITHUB_ENV
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Cookie: ${{ secrets.OPENI_COOKIE }}" \
+                "https://openi.pcl.ac.cn/api/v1/${{ vars.USER_NAME }}/${{ vars.REPO_NAME }}/ai_task/list")
+            if [ "$HTTP_CODE" -ne 200 ]; then
+                echo "Cookie 过期，需重新登录"
+                ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
+                # 从 secrets 初始化 COOKIE（如果 secrets 过期，用 login.sh 更新）
+                export COOKIE="${{ secrets.OPENI_COOKIE }}"
+                # 然后用 replace_csrf.sh 更新其中的 _csrf 和 i_like_openi
+                export COOKIE=$(./scripts/replace_csrf.sh)
+                echo "COOKIE=${COOKIE}" >> $GITHUB_ENV
+            fi
       - name: Start debug job
         run: |
             set -e
