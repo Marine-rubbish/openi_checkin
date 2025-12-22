@@ -21,7 +21,9 @@ action() {
         DATA_ARGS=(--data-raw "{\"_csrf\":\"${CSRF}\"}")
     fi
 
-    echo "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/${ACTION}?id=${JOB_ID}&_csrf=${CSRF}"
+    echo "DEBUG: ACTION=$ACTION, USER_NAME=$USER_NAME, REPO_NAME=$REPO_NAME, JOB_ID=$JOB_ID"
+    echo "DEBUG: CSRF=$CSRF"
+    echo "DEBUG: URL=https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/${ACTION}?id=${JOB_ID}&_csrf=${CSRF}"
 
     # 捕获 body + http_code（最后一行）
     local resp

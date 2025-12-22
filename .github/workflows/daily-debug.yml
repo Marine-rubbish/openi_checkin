@@ -83,4 +83,11 @@ jobs:
             echo "最大 task id: ${JOB_ID}"
       - name: Stop debug job
         run: |
+            STATUS=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
+              -H "Cookie: $OPENI_COOKIE" | jq -r ".data.tasks[] | select(.id == $JOB_ID) | .status")
+            echo "Task $JOB_ID status: $STATUS"
+            if [ "$STATUS" != "RUNNING" ]; then
+              echo "Error: Task not RUNNING, cannot stop."
+              exit 1
+            fi
             ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"

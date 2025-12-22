@@ -110,9 +110,10 @@ echo "$OPENI_COOKIE"
 # echo "JOB_ID=${JOB_ID}"
 # echo "最大 task id: ${JOB_ID}"
 
-# # stop（如果需要）
-# action stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
-# echo "status = ${status}"
+# stop（如果需要）
+source ./scripts/action.sh
+action stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$OPENI_COOKIE"
+echo "status = ${status}"
 
-# echo ""
-# echo "请求已发送。查看返回输出确认。"
+echo ""
+echo "请求已发送。查看返回输出确认。"
