@@ -1,1 +1,7 @@
 test.*
+tmp.*
+interview.md
+cookies.txt
+
+.env.local
+.secrets.local

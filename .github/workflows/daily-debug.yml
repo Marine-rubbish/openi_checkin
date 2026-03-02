@@ -19,75 +19,168 @@ jobs:
     steps:
       # 检出仓库内文件
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      # - name: Install dependencies
-      #   run: |
-      #     # sudo apt-get update
-      #     apt-get install -y jq
+      - name: Fix script permissions
+        run: |
+          chmod +x scripts/*.sh
 
       - name: Get JOB_ID
-        # 字面块标量（保留换行）
+        shell: bash
         run: |
-            set -euo pipefail
-            JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
-                -H "Cookie: $COOKIE" \
-            | jq '.data.tasks | map(.task.id) | max')
-            echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
-            echo "最大 task id: ${JOB_ID}"
-            chmod +x ./scripts/action.sh ./scripts/replace_csrf.sh ./scripts/login.sh
+          set -euo pipefail
+
+          # 确保 jq 和 curl 存在（顺便确保 ca-certificates 存在）
+          if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+              if command -v sudo >/dev/null 2>&1; then
+                SUDO="sudo"
+              else
+                echo "ERROR: need root or sudo to install packages (jq, curl)" >&2
+                exit 1
+              fi
+            fi
+
+            # 修复 Debian Buster 404 (Buster 已停止维护，需使用 archive 源)
+            if grep -q "buster" /etc/os-release 2>/dev/null; then
+              $SUDO sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list
+              $SUDO sed -i 's/security.debian.org/archive.debian.org/g' /etc/apt/sources.list
+              $SUDO sed -i '/stretch-updates/d' /etc/apt/sources.list
+            fi
+
+            $SUDO apt-get update
+            $SUDO apt-get install -y jq curl ca-certificates
+          fi
+
+          # 提取 CSRF
+          CSRF=$(echo "$COOKIE" | grep -oP '_csrf=\K[^;]+' || echo "")
+          
+          # 精简后的 URL，带上必要的 _csrf 参数
+          url="https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=30&_csrf=${CSRF}"
+          echo "Requesting: $url"
+
+          resp="$(
+            curl --fail --show-error --silent \
+              --retry 5 --retry-delay 2 \
+              --connect-timeout 20 --max-time 60 \
+              --tlsv1.2 \
+              -G "$url" \
+              -H "Cookie: $COOKIE"
+          )"
+
+          # 校验返回结构
+          echo "$resp" | jq -e '.data.tasks' >/dev/null
+
+          # 筛选当前项目的任务 ID
+          JOB_ID=$(echo "$resp" | jq -r --arg REPO "$REPO_NAME" '.data.tasks | map(select(.repo_name == $REPO or .task.repo_name == $REPO)) | map(.task.id // .id) | max')
+
+          if [[ -z "${JOB_ID}" || "${JOB_ID}" == "null" ]]; then
+            echo "未在响应中找到项目 ${REPO_NAME} 的任务，响应如下："
+            echo "$resp" | jq .
+            exit 1
+          fi
+
+          echo "JOB_ID=${JOB_ID}" >> "$GITHUB_ENV"
+          echo "项目 ${REPO_NAME} 的最大 task id: ${JOB_ID}"
       - name: Check Cookie Validity
         run: |
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Cookie: ${{ secrets.OPENI_COOKIE }}" \
-                "https://openi.pcl.ac.cn/api/v1/${{ vars.USER_NAME }}/${{ vars.REPO_NAME }}/ai_task/list")
+            # 统一使用环境变量中的 COOKIE
+            CSRF=$(echo "$COOKIE" | grep -oP '_csrf=\K[^;]+' || echo "")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Cookie: $COOKIE" \
+                "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?pageSize=1&_csrf=${CSRF}")
+            
             if [ "$HTTP_CODE" -ne 200 ]; then
-                echo "Cookie 过期，需重新登录"
+                echo "Cookie 过期 (HTTP $HTTP_CODE)，正在重新登录..."
+                # 1. 运行登录脚本更新 cookies.txt
                 ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
-                # 从 secrets 初始化 COOKIE（如果 secrets 过期，用 login.sh 更新）
-                export COOKIE="${{ secrets.OPENI_COOKIE }}"
-                # 然后用 replace_csrf.sh 更新其中的 _csrf 和 i_like_openi
-                export COOKIE=$(./scripts/replace_csrf.sh)
-                echo "COOKIE=${COOKIE}" >> $GITHUB_ENV
+                
+                # 2. 调用 replace_csrf.sh 合并最新的 CSRF/Session 到 COOKIE 变量
+                # 注意：此处 export 是为了让子脚本 replace_csrf.sh 能读取到旧的 COOKIE 基准值
+                export OPENI_COOKIE="$COOKIE"
+                UPDATED_COOKIE=$(./scripts/replace_csrf.sh)
+                
+                # 3. 核心：写入 GITHUB_ENV，这样后续所有 step 看到的 $COOKIE 都是新的
+                echo "COOKIE=${UPDATED_COOKIE}" >> $GITHUB_ENV
+                echo "Cookie 已更新并写入环境"
+            else
+                echo "Cookie 仍然有效 (HTTP 200)"
             fi
       - name: Start debug job
         run: |
-            set -e
-            ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
-            # 确保一定是在RUNNING状态
-            # for i in $(seq 1 "${BRIEF_COUNT}"); do
-            #     echo "第 ${i} 次发送 brief"
-            #     action brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
-            #     echo "task status: $status"
-            #     if [ "$status" = "RUNNING" ]; then
-            #         echo "任务已启动，状态为 RUNNING"
-            #         break
-            #     fi
-            #     sleep "${BRIEF_INTERVAL}"
-            # done
-            sleep 200
-        # 字面块标量（保留换行）
-      # - name: Re Login 2
-      #   # 字面块标量（保留换行）
-      #   run: |
-      #       set -e
-      #       ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
-      #       # 从 secrets 初始化 OPENI_COOKIE（如果 secrets 过期，用 login.sh 更新）
-      #       export OPENI_COOKIE="${{ secrets.OPENI_COOKIE }}"
-      #       # 然后用 replace_csrf.sh 更新其中的 _csrf 和 i_like_openi
-      #       export OPENI_COOKIE=$(./scripts/replace_csrf.sh)
-      #       echo "OPENI_COOKIE=${OPENI_COOKIE}" >> $GITHUB_ENV
-      - name: Get Next JOB_ID
+          set -e
+          ./scripts/action.sh restart "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
+          # 确保一定是在RUNNING状态
+          # for i in $(seq 1 "${BRIEF_COUNT}"); do
+          #     echo "第 ${i} 次发送 brief"
+          #     action brief "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
+          #     echo "task status: $status"
+          #     if [ "$status" = "RUNNING" ]; then
+          #         echo "任务已启动，状态为 RUNNING"
+          #         break
+          #     fi
+          #     sleep "${BRIEF_INTERVAL}"
+          # done
+          sleep 200
+            
+      - name: Get JOB_ID
+        shell: bash
         run: |
-            set -euo pipefail
-            JOB_ID=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
-                -H "Cookie: $OPENI_COOKIE" \
-            | jq '.data.tasks | map(.task.id) | max')
-            echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
-            echo "最大 task id: ${JOB_ID}"
+          set -euo pipefail
+
+          # 确保 jq 和 curl 存在（顺便确保 ca-certificates 存在）
+          if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+              if command -v sudo >/dev/null 2>&1; then
+                SUDO="sudo"
+              else
+                echo "ERROR: need root or sudo to install packages (jq, curl)" >&2
+                exit 1
+              fi
+            fi
+
+            # 修复 Debian Buster 404
+            if grep -q "buster" /etc/os-release 2>/dev/null; then
+              $SUDO sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list
+              $SUDO sed -i 's/security.debian.org/archive.debian.org/g' /etc/apt/sources.list
+              $SUDO sed -i '/stretch-updates/d' /etc/apt/sources.list
+            fi
+
+            $SUDO apt-get update
+            $SUDO apt-get install -y jq curl ca-certificates
+          fi
+
+          CSRF=$(echo "$COOKIE" | grep -oP '_csrf=\K[^;]+' || echo "")
+          url="https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=30&_csrf=${CSRF}"
+          echo "Requesting: $url"
+
+          # retry delay 等待两秒
+          resp="$(
+            curl --fail --show-error --silent \
+              --retry 5 --retry-delay 2 \
+              --connect-timeout 20 --max-time 60 \
+              --tlsv1.2 \
+              -G "$url" \
+              -H "Cookie: $COOKIE"
+          )"
+
+          # 校验并提取当前项目的最新 JOB_ID
+          JOB_ID=$(echo "$resp" | jq -r --arg REPO "$REPO_NAME" '.data.tasks | map(select(.repo_name == $REPO or .task.repo_name == $REPO)) | map(.task.id // .id) | max')
+
+          if [[ -z "${JOB_ID}" || "${JOB_ID}" == "null" ]]; then
+            echo "未找到项目 ${REPO_NAME} 的 JOB_ID"
+            exit 1
+          fi
+
+          echo "JOB_ID=${JOB_ID}" >> "$GITHUB_ENV"
+          echo "最大 task id: ${JOB_ID}"
       - name: Stop debug job
         run: |
-            STATUS=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/${USER_NAME}/${REPO_NAME}/ai_task/list" \
-              -H "Cookie: $OPENI_COOKIE" | jq -r ".data.tasks[] | select(.id == $JOB_ID) | .status")
+            CSRF=$(echo "$COOKIE" | grep -oP '_csrf=\K[^;]+' || echo "")
+            # 同样修改此处的查询 URL
+            STATUS=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=10&_csrf=${CSRF}" \
+              -H "Cookie: $COOKIE" | jq -r --arg ID "$JOB_ID" '.data.tasks[] | select((.id|tostring) == $ID or (.task.id|tostring) == $ID) | .status // .task.status')
             echo "Task $JOB_ID status: $STATUS"
             if [ "$STATUS" != "RUNNING" ]; then
               echo "Error: Task not RUNNING, cannot stop."
