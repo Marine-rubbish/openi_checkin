@@ -122,9 +122,9 @@ jobs:
           #     fi
           #     sleep "${BRIEF_INTERVAL}"
           # done
-          sleep 200
+          sleep 100
             
-      - name: Get JOB_ID
+      - name: Get New JOB_ID after restart
         shell: bash
         run: |
           set -euo pipefail
@@ -133,25 +133,29 @@ jobs:
           CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
           url="https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=30&_csrf=${CSRF}"
           
+          # 获取列表，并添加一些 Header 模拟
           resp="$(
             curl --fail --show-error --silent \
               --retry 5 --retry-delay 2 \
               --connect-timeout 20 --max-time 60 \
               --tlsv1.2 \
-              -G "$url" \
-              -H "Cookie: $COOKIE"
+              -H "Cookie: $COOKIE" \
+              -H 'accept: application/json, text/plain, */*' \
+              "$url"
           )"
 
-          # 校验并提取当前项目的最新 JOB_ID
+          # 校验并提取当前项目【状态为 RUNNING】或者【最新创建】的任务 ID
+          # 重启后会生成一个全新的任务 ID，我们取对应项目的 max id
           JOB_ID=$(echo "$resp" | jq -r --arg REPO "$REPO_NAME" '.data.tasks | map(select(.repo_name == $REPO or .task.repo_name == $REPO)) | map(.task.id // .id) | max')
 
           if [[ -z "${JOB_ID}" || "${JOB_ID}" == "null" ]]; then
-            echo "未找到项目 ${REPO_NAME} 的 JOB_ID"
+            echo "重启后未找到项目 ${REPO_NAME} 的新 JOB_ID"
+            echo "Response: $resp"
             exit 1
           fi
 
           echo "JOB_ID=${JOB_ID}" >> "$GITHUB_ENV"
-          echo "最大 task id: ${JOB_ID}"
+          echo "重启后的最新 task id: ${JOB_ID}"
       - name: Stop debug job
         run: |
             CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
