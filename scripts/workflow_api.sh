@@ -86,9 +86,12 @@ renew_cookie() {
   local current_cookie="$3"
   local renewed
 
-  ./scripts/login.sh "$user_name" "$pass_word"
-  export OPENI_COOKIE="$current_cookie"
-  renewed="$(./scripts/replace_csrf.sh)"
+  renewed="$(./scripts/login.sh "$user_name" "$pass_word")"
+  if [ -z "$renewed" ]; then
+    # 兜底：保留旧逻辑，避免异常场景直接丢失 cookie
+    export OPENI_COOKIE="$current_cookie"
+    renewed="$(./scripts/replace_csrf.sh)"
+  fi
   normalize_cookie "$renewed"
 }
 
