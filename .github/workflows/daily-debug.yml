@@ -72,9 +72,18 @@ jobs:
           set -euo pipefail
           source ./scripts/workflow_api.sh
 
-          resp="$(fetch_my_list "$COOKIE" 1 30 5 1)"
+          resp="$(fetch_my_list "$COOKIE" 1 30 5 0)"
 
-          # 校验返回结构
+          # 非期望 JSON（例如 Invalid csrf token. 或 400 文本）则续期重试一次
+          if ! is_tasks_json "$resp"; then
+            echo "Get JOB_ID 首次请求异常，执行静默续期后重试..."
+            COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            echo "COOKIE=${COOKIE}" >> "$GITHUB_ENV"
+            resp="$(fetch_my_list "$COOKIE" 1 30 5 0)"
+          fi
+
+          # 二次校验，确保后续 jq 安全
           echo "$resp" | jq -e '.data.tasks' >/dev/null
 
           # 筛选当前项目的任务 ID
