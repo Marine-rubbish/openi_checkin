@@ -48,56 +48,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # 1. 尝试从当前 COOKIE 提取 CSRF 进行一次轻量级请求验证
-          CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
-          
-          HTTP_CODE=0
-          if [ -n "$CSRF" ]; then
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Cookie: $COOKIE" \
-                "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?pageSize=1&_csrf=${CSRF}")
-          fi
+          source ./scripts/workflow_api.sh
+
+          HTTP_CODE="$(probe_my_list_http_code "$COOKIE")"
 
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "Cookie 或 CSRF 无效 (HTTP $HTTP_CODE)，启动自动登录续期..."
-            ./scripts/login.sh "$USER_NAME" "$PASS_WORD"
-            
-            # 使用 login.sh 产生的 cookies.txt 更新 COOKIE 变量
-            export OPENI_COOKIE="$COOKIE"
-            UPDATED_COOKIE=$(./scripts/replace_csrf.sh)
+            UPDATED_COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            UPDATED_COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$UPDATED_COOKIE")"
             
             # 将新 Cookie 注入环境，供后面所有步骤使用
             echo "COOKIE=${UPDATED_COOKIE}" >> $GITHUB_ENV
             echo "Cookie 已更新并写入环境"
           else
             echo "当前 Cookie 和 CSRF 校验通过 (HTTP 200)"
-            echo "COOKIE=${COOKIE}" >> $GITHUB_ENV
+            SAFE_COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            echo "COOKIE=${SAFE_COOKIE}" >> $GITHUB_ENV
           fi
 
       - name: Get JOB_ID
         shell: bash
         run: |
           set -euo pipefail
+          source ./scripts/workflow_api.sh
 
-          # 此时提取的一定是有效的（或者是刚好更新过的）
-          CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
-          url="https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=30&_csrf=${CSRF}"
-          echo "Requesting: $url"
-
-          resp="$(
-            curl --fail --show-error --silent \
-              --retry 5 --retry-delay 2 \
-              --connect-timeout 20 --max-time 60 \
-              --tlsv1.2 \
-              -G "$url" \
-              -H "Cookie: $COOKIE"
-          )"
+          resp="$(fetch_my_list "$COOKIE" 1 30 5 1)"
 
           # 校验返回结构
           echo "$resp" | jq -e '.data.tasks' >/dev/null
 
           # 筛选当前项目的任务 ID
-          JOB_ID=$(echo "$resp" | jq -r --arg REPO "$REPO_NAME" '.data.tasks | map(select(.repo_name == $REPO or .task.repo_name == $REPO)) | map(.task.id // .id) | max')
+          JOB_ID="$(extract_max_job_id "$resp" "$REPO_NAME")"
 
           if [[ -z "${JOB_ID}" || "${JOB_ID}" == "null" ]]; then
             echo "未在响应中找到项目 ${REPO_NAME} 的任务，响应如下："
@@ -128,43 +109,63 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # 同样逻辑，提取 CSRF
-          CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
-          url="https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=30&_csrf=${CSRF}"
-          
-          # 获取列表，并添加一些 Header 模拟
-          resp="$(
-            curl --fail --show-error --silent \
-              --retry 5 --retry-delay 2 \
-              --connect-timeout 20 --max-time 60 \
-              --tlsv1.2 \
-              -H "Cookie: $COOKIE" \
-              -H 'accept: application/json, text/plain, */*' \
-              "$url"
-          )"
+          source ./scripts/workflow_api.sh
 
-          # 校验并提取当前项目【状态为 RUNNING】或者【最新创建】的任务 ID
-          # 重启后会生成一个全新的任务 ID，我们取对应项目的 max id
-          JOB_ID=$(echo "$resp" | jq -r --arg REPO "$REPO_NAME" '.data.tasks | map(select(.repo_name == $REPO or .task.repo_name == $REPO)) | map(.task.id // .id) | max')
+          resp="$(fetch_my_list "$COOKIE" 1 30 2 0)"
+
+          # 如果不是期望 JSON（例如 Invalid csrf token.），就续期再试一次
+          if ! is_tasks_json "$resp"; then
+            echo "检测到 CSRF/会话异常（可能返回纯文本），执行静默续期..."
+            COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            echo "COOKIE=${COOKIE}" >> "$GITHUB_ENV"
+            resp="$(fetch_my_list "$COOKIE" 1 30 2 0)"
+          fi
+
+          # 二次校验，避免 jq 解析纯文本再次炸
+          echo "$resp" | jq -e '.data.tasks' >/dev/null
+
+          JOB_ID="$(extract_max_job_id "$resp" "$REPO_NAME")"
 
           if [[ -z "${JOB_ID}" || "${JOB_ID}" == "null" ]]; then
             echo "重启后未找到项目 ${REPO_NAME} 的新 JOB_ID"
-            echo "Response: $resp"
             exit 1
           fi
 
           echo "JOB_ID=${JOB_ID}" >> "$GITHUB_ENV"
           echo "重启后的最新 task id: ${JOB_ID}"
       - name: Stop debug job
+        shell: bash
         run: |
-            CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
-            # 修正 URL：必须带上 _csrf
-            STATUS=$(curl -s -G "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=1&pageSize=10&_csrf=${CSRF}" \
-              -H "Cookie: $COOKIE" | jq -r --arg ID "$JOB_ID" '.data.tasks[] | select((.id|tostring) == $ID or (.task.id|tostring) == $ID) | .status // .task.status')
-            echo "Task $JOB_ID status: $STATUS"
-            if [ "$STATUS" != "RUNNING" ]; then
-              echo "Error: Task not RUNNING, cannot stop."
-              exit 1
-            fi
-            ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"
+          set -euo pipefail
+          source ./scripts/workflow_api.sh
+
+          resp="$(fetch_my_list "$COOKIE" 1 10 2 0)"
+
+          # 非期望 JSON（例如 Invalid csrf token.）则续期重试一次
+          if ! is_tasks_json "$resp"; then
+            echo "检测到 CSRF/会话异常（可能返回纯文本），执行静默续期..."
+            COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
+            echo "COOKIE=${COOKIE}" >> "$GITHUB_ENV"
+            resp="$(fetch_my_list "$COOKIE" 1 10 2 0)"
+          fi
+
+          # 二次校验，确保后续 jq 安全
+          echo "$resp" | jq -e '.data.tasks' >/dev/null
+
+          STATUS="$(extract_status_by_job_id "$resp" "$JOB_ID")"
+
+          echo "Task $JOB_ID status: $STATUS"
+
+          if [ -z "$STATUS" ]; then
+            echo "未在列表中找到 task=$JOB_ID（可能列表未及时刷新或任务已消失）"
+            exit 1
+          fi
+
+          if [ "$STATUS" != "RUNNING" ] && [ "$STATUS" != "WAITING" ]; then
+            echo "Error: Task status is $STATUS, cannot stop."
+            exit 1
+          fi
+
+          ./scripts/action.sh stop "$USER_NAME" "$REPO_NAME" "$JOB_ID" "$COOKIE"

@@ -10,9 +10,8 @@ action() {
     local COOKIE=${5:-$COOKIE}
     local CSRF
 
-    # 从 COOKIE 中提取 _csrf
-    local CSRF
-    CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' || echo "")
+    # 从 COOKIE 中提取 _csrf（只取最后一个，避免多个 _csrf 造成换行）
+    CSRF=$(echo "$COOKIE" | grep -o '_csrf=[^;]*' | sed 's/_csrf=//' | tail -n 1 || echo "")
     
     # 构建 URL，将 ID 和 CSRF 都作为查询参数
     local FETCH_URL="https://openi.pcl.ac.cn/api/v1/ai_task/${ACTION}?id=${JOB_ID}&_csrf=${CSRF}"

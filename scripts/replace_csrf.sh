@@ -10,9 +10,9 @@ fi
 extract_cookie() {
     name="$1"
     val=""
-    val=$(awk -v n="$name" 'tolower($6)==tolower(n){print $7; exit}' "$COOKIES_FILE" 2>/dev/null || true)
+    val=$(awk -v n="$name" 'BEGIN{IGNORECASE=1} $0 !~ /^[[:space:]]*#/ && NF>=7 && tolower($6)==tolower(n){print $7; exit}' "$COOKIES_FILE" 2>/dev/null || true)
     if [ -z "$val" ]; then
-        val=$(grep -oE "(^|[[:space:];])${name}=[^;[:space:]]+" "$COOKIES_FILE" | sed -E "s/.*${name}=//" | head -n1 || true)
+        val=$(grep -v '^[[:space:]]*#' "$COOKIES_FILE" | tr '\n' ';' | grep -oE "(^|[[:space:];])${name}=[^;[:space:]]+" | sed -E "s/.*${name}=//" | head -n1 || true)
     fi
     printf "%s" "$val"
 }
