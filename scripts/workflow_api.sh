@@ -4,6 +4,33 @@ extract_csrf() {
   echo "$1" | sed -n 's/.*_csrf=\([^;]*\).*/\1/p' | head -n 1
 }
 
+build_my_list_url() {
+  local cookie="$1"
+  local page="${2:-1}"
+  local page_size="${3:-30}"
+  local csrf
+  csrf="$(extract_csrf "$cookie")"
+  echo "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=${page}&pageSize=${page_size}&_csrf=${csrf}"
+}
+
+debug_response() {
+  local label="$1"
+  local resp="$2"
+  echo "[DEBUG] ${label} response_len=${#resp}" >&2
+  echo "[DEBUG] ${label} response_preview=$(echo "$resp" | tr '\n' ' ' | cut -c1-500)" >&2
+}
+
+assert_tasks_json() {
+  local label="$1"
+  local resp="$2"
+  if ! is_tasks_json "$resp"; then
+    echo "[ERROR] ${label}: response is not expected tasks JSON" >&2
+    debug_response "$label" "$resp"
+    return 1
+  fi
+  return 0
+}
+
 fetch_my_list() {
   local cookie="$1"
   local page="${2:-1}"
@@ -12,6 +39,9 @@ fetch_my_list() {
   local use_fail="${5:-0}"
   local csrf
   csrf="$(extract_csrf "$cookie")"
+  local url
+  url="$(build_my_list_url "$cookie" "$page" "$page_size")"
+  echo "[DEBUG] fetch_my_list url=${url}" >&2
 
   if [ "$use_fail" = "1" ]; then
     curl --fail --show-error --silent \
@@ -19,14 +49,14 @@ fetch_my_list() {
       --connect-timeout 20 --max-time 60 --tlsv1.2 \
       -H "Cookie: $cookie" \
       -H 'accept: application/json, text/plain, */*' \
-      "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=${page}&pageSize=${page_size}&_csrf=${csrf}"
+      "$url"
   else
     curl --show-error --silent \
       --retry "$retry_count" --retry-delay 2 \
       --connect-timeout 20 --max-time 60 --tlsv1.2 \
       -H "Cookie: $cookie" \
       -H 'accept: application/json, text/plain, */*' \
-      "https://openi.pcl.ac.cn/api/v1/ai_task/my_list?page=${page}&pageSize=${page_size}&_csrf=${csrf}"
+      "$url"
   fi
 }
 
@@ -131,6 +161,11 @@ extract_max_job_id() {
   local resp="$1"
   local repo_name="$2"
 
+  if ! is_tasks_json "$resp"; then
+    echo ""
+    return 0
+  fi
+
   echo "$resp" | jq -r --arg REPO "$repo_name" '.data.tasks
     | map(select(.repo_name == $REPO or .task.repo_name == $REPO))
     | map(.task.id // .id)
@@ -140,6 +175,11 @@ extract_max_job_id() {
 extract_status_by_job_id() {
   local resp="$1"
   local job_id="$2"
+
+  if ! is_tasks_json "$resp"; then
+    echo ""
+    return 0
+  fi
 
   echo "$resp" | jq -r --arg ID "$job_id" '
     .data.tasks[]

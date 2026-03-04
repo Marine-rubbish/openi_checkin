@@ -72,7 +72,10 @@ jobs:
           set -euo pipefail
           source ./scripts/workflow_api.sh
 
+          echo "[DEBUG] Get JOB_ID url=$(build_my_list_url "$COOKIE" 1 30)"
+
           resp="$(fetch_my_list "$COOKIE" 1 30 5 0)"
+          debug_response "Get JOB_ID first" "$resp"
 
           # 非期望 JSON（例如 Invalid csrf token. 或 400 文本）则续期重试一次
           if ! is_tasks_json "$resp"; then
@@ -80,11 +83,13 @@ jobs:
             COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
             COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
             echo "COOKIE=${COOKIE}" >> "$GITHUB_ENV"
+            echo "[DEBUG] Get JOB_ID retry url=$(build_my_list_url "$COOKIE" 1 30)"
             resp="$(fetch_my_list "$COOKIE" 1 30 5 0)"
+            debug_response "Get JOB_ID retry" "$resp"
           fi
 
           # 二次校验，确保后续 jq 安全
-          echo "$resp" | jq -e '.data.tasks' >/dev/null
+          assert_tasks_json "Get JOB_ID" "$resp"
 
           # 筛选当前项目的任务 ID
           JOB_ID="$(extract_max_job_id "$resp" "$REPO_NAME")"
@@ -120,7 +125,10 @@ jobs:
           set -euo pipefail
           source ./scripts/workflow_api.sh
 
+          echo "[DEBUG] Get New JOB_ID url=$(build_my_list_url "$COOKIE" 1 30)"
+
           resp="$(fetch_my_list "$COOKIE" 1 30 2 0)"
+          debug_response "Get New JOB_ID first" "$resp"
 
           # 如果不是期望 JSON（例如 Invalid csrf token.），就续期再试一次
           if ! is_tasks_json "$resp"; then
@@ -128,11 +136,13 @@ jobs:
             COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
             COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
             echo "COOKIE=${COOKIE}" >> "$GITHUB_ENV"
+            echo "[DEBUG] Get New JOB_ID retry url=$(build_my_list_url "$COOKIE" 1 30)"
             resp="$(fetch_my_list "$COOKIE" 1 30 2 0)"
+            debug_response "Get New JOB_ID retry" "$resp"
           fi
 
           # 二次校验，避免 jq 解析纯文本再次炸
-          echo "$resp" | jq -e '.data.tasks' >/dev/null
+          assert_tasks_json "Get New JOB_ID" "$resp"
 
           JOB_ID="$(extract_max_job_id "$resp" "$REPO_NAME")"
 
@@ -149,7 +159,10 @@ jobs:
           set -euo pipefail
           source ./scripts/workflow_api.sh
 
+          echo "[DEBUG] Stop debug job url=$(build_my_list_url "$COOKIE" 1 10)"
+
           resp="$(fetch_my_list "$COOKIE" 1 10 2 0)"
+          debug_response "Stop debug job first" "$resp"
 
           # 非期望 JSON（例如 Invalid csrf token.）则续期重试一次
           if ! is_tasks_json "$resp"; then
@@ -157,11 +170,13 @@ jobs:
             COOKIE="$(renew_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
             COOKIE="$(ensure_valid_cookie "$USER_NAME" "$PASS_WORD" "$COOKIE")"
             echo "COOKIE=${COOKIE}" >> "$GITHUB_ENV"
+            echo "[DEBUG] Stop debug job retry url=$(build_my_list_url "$COOKIE" 1 10)"
             resp="$(fetch_my_list "$COOKIE" 1 10 2 0)"
+            debug_response "Stop debug job retry" "$resp"
           fi
 
           # 二次校验，确保后续 jq 安全
-          echo "$resp" | jq -e '.data.tasks' >/dev/null
+          assert_tasks_json "Stop debug job" "$resp"
 
           STATUS="$(extract_status_by_job_id "$resp" "$JOB_ID")"
 
